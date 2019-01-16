@@ -93,7 +93,7 @@ fn subtract_kmers(kmers_in: Vec<&str>, kmer_counts: CountingBloomFilter, subtrac
         let file = match File::open(kmer_file) {
             Ok(file) => file,
             Err(error) => {
-                panic!("There was a problem opening file: {:?}", error)
+                panic!("There was a problem opening file {} with error {}", kmer_file,error)
             },
         };
         let gz = GzDecoder::new(file);
@@ -127,7 +127,7 @@ fn count_kmers_fastq(kmers_in: &Vec<&str>, counting_bits: usize, estimated_kmers
         let file = match File::open(kmer_file) {
             Ok(file) => file,
             Err(error) => {
-                panic!("There was a problem opening the file: {:?}", error)
+                panic!("There was a problem opening the file {} with error {}", kmer_file, error)
             },
         };
         let gz = GzDecoder::new(file);
