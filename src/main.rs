@@ -10,7 +10,7 @@ use std::fs::File;
 
 use std::cmp::min;
 
-use bloom::CountingBloomFilter;
+use bloom::{ASMS,CountingBloomFilter};
 
 use clap::{Arg, App};
 
@@ -133,10 +133,10 @@ fn count_kmers_fastq(kmers_in: &Vec<&str>, counting_bits: usize, estimated_kmers
         let gz = GzDecoder::new(file);
         for (line_number, line) in io::BufReader::new(gz).lines().enumerate() {
             if line_number % 4 == 1 {
-                let dna: DnaString = DnaString::from_dna_string(&line.unwrap());
+                let dna: DnaString = DnaString::from_dna_string(&line.unwrap()); //Vec<u64> 2bit encoded
                 for kmer_start in 0..(dna.len() - k_size) {
-                    let k: Kmer21 = dna.get_kmer(kmer_start);
-                    kmer_counts.insert_get_count(&min(k.to_u64(), k.rc().to_u64()));
+                    let k: Kmer21 = dna.get_kmer(kmer_start); //statically typed kmer size
+                    kmer_counts.insert(&min(k.to_u64(), k.rc().to_u64()));
                 }
             }
         }
