@@ -3,10 +3,11 @@ Memory efficient (approximate) thresholded kmer set subtraction using counting b
 
 To Install
 Requirements: Rust ver 1.6 or later
-
+```
 git clone git@github.com:wheaton5/distinguishing_kmers.git
 cd distinguishing_kmers
 cargo build --release
+```
 ```
 ./target/release/distinguishing_kmers -h
 distinguishing_kmers
