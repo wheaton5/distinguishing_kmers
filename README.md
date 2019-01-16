@@ -7,7 +7,7 @@ Requirements: Rust ver 1.6 or later
 git clone git@github.com:wheaton5/distinguishing_kmers.git
 cd distinguishing_kmers
 cargo build --release
-
+"""
 ./target/release/distinguishing_kmers -h
 distinguishing_kmers
 Haynes Heaton <whheaton@gmail.com>
@@ -34,3 +34,4 @@ OPTIONS:
 
         --min_source_count <min_source_count>            min kmer count in input files to report in output
         --min_subtract_count <min_subtract_count>        min kmer count in subtract files to subtract from kmers_in
+"""
