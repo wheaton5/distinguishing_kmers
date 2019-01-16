@@ -2,7 +2,7 @@
 Memory efficient (approximate) thresholded kmer set subtraction using counting bloom filters.
 
 To Install
-Requirements: Rust ver 1.6 or later
+Requirements: Rust ver 1.3 or later
 ```
 git clone git@github.com:wheaton5/distinguishing_kmers.git
 cd distinguishing_kmers
