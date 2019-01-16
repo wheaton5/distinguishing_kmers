@@ -77,7 +77,7 @@ fn main() {
     }
     eprintln!("with at least {} count",min_subtract_count);
     eprintln!("Reminder! This program uses counting bloom filters and thus counts are approximate but can only be correct or over-counts");
-    let k_size: usize = 21;
+    let k_size: usize = 21; // THIS CANNOT BE CHANGED WITHOUT CHANGING Kmer datatype
     let source_counting_bits = 6;
     let subtract_counting_bits = 4;
     let bloom_kmer_in_counts = count_kmers_fastq(&kmers_in, source_counting_bits, estimated_kmers, k_size);
