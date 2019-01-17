@@ -34,5 +34,18 @@ OPTIONS:
             fastq files of kmers to be threshold subtracted from kmers_in files.
 
         --min_source_count <min_source_count>            min kmer count in input files to report in output
-        --min_subtract_count <min_subtract_count>        min kmer count in subtract files to subtract from kmers_in
+        --max_subtract_count <max_subtract_count>        max kmer count in subtract files before subtracting from kmers_in
 ```        
+
+Example using tiny made up data
+```
+./target/release/distinguishing_kmers --kmers_in test/data/kmers_in.fastq.gz --kmers_subtract test/data/kmers_subtract.fastq.gz --min_source_count 5 --max_subtract_count 4 --estimated_kmers 1000
+
+This program will take kmers from files
+        test/data/kmers_in.fastq.gz
+with at least 5 count and subtract kmers from files
+        test/data/kmers_subtract.fastq.gz
+with at least 3 count
+Reminder! This program uses counting bloom filters and thus counts are approximate but can only be correct or over-counts
+AAAAAAGGGGGACCCCTTTTT   6       0
+```

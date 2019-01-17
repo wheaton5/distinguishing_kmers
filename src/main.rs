@@ -10,7 +10,7 @@ use std::fs::File;
 
 use std::cmp::min;
 
-use bloom::{ASMS,CountingBloomFilter};
+use bloom::{ASMS,CountingBloomFilter,BloomFilter};
 
 use clap::{Arg, App};
 
@@ -41,10 +41,10 @@ fn main() {
                 .takes_value(true)
                 .help("min kmer count in input files to report in output")
                 .required(true))
-        .arg(Arg::with_name("min_subtract_count")
-                .long("min_subtract_count")
+        .arg(Arg::with_name("max_subtract_count")
+                .long("max_subtract_count")
                 .takes_value(true)
-                .help("min kmer count in subtract files to subtract from kmers_in")
+                .help("max kmer count in subtract files before it subtracts from kmers_in")
                 .required(true))
         .arg(Arg::with_name("difference_threshold")
                 .long("difference_threshold")
@@ -53,10 +53,10 @@ fn main() {
         .arg(Arg::with_name("estimated_kmers")
                 .long("estimated_kmers")
                 .help("estimated number of unique kmers. Good rule of thumb is genome size * 2")
-                .takes_value(true))
+                .takes_value(true)
+                .required(true))
         .get_matches();
 
-    eprintln!("");
     let min_source_count = matches.value_of("min_source_count").unwrap_or("5");
     let min_source_count: u32 = min_source_count.to_string().parse::<u32>().unwrap();
     let min_subtract_count = matches.value_of("min_subtract_count").unwrap_or("3");
@@ -67,6 +67,7 @@ fn main() {
     let estimated_kmers: u32 = estimated_kmers.to_string().parse::<u32>().unwrap();
     let kmers_in: Vec<_> = matches.values_of("kmers_in").unwrap().collect();
     let kmers_subtract: Vec<_> = matches.values_of("kmers_subtract").unwrap().collect();
+    eprintln!("");
     eprintln!("This program will take kmers from files");
     for f in &kmers_in {
         eprintln!("\t{}",f);
@@ -83,12 +84,13 @@ fn main() {
     let bloom_kmer_in_counts = count_kmers_fastq(&kmers_in, source_counting_bits, estimated_kmers, k_size);
     let bloom_kmer_subtract_counts = count_kmers_fastq(&kmers_subtract, subtract_counting_bits, estimated_kmers, k_size);
 
-    subtract_kmers(kmers_in, bloom_kmer_in_counts, bloom_kmer_subtract_counts, min_source_count, min_subtract_count, difference_threshold, k_size);
+    subtract_kmers(kmers_in, bloom_kmer_in_counts, bloom_kmer_subtract_counts, min_source_count, min_subtract_count, difference_threshold, k_size, estimated_kmers);
 }
 
 
 fn subtract_kmers(kmers_in: Vec<&str>, kmer_counts: CountingBloomFilter, subtract_counts: CountingBloomFilter, 
-                min_source_count: u32, min_subtract_count: u32, difference_threshold: u32, k_size: usize) {
+                min_source_count: u32, min_subtract_count: u32, difference_threshold: u32, k_size: usize, estimated_kmers: u32) {
+    let mut visited_kmer = BloomFilter::with_rate(0.03, estimated_kmers);
     for kmer_file in kmers_in {
         let file = match File::open(kmer_file) {
             Ok(file) => file,
@@ -100,10 +102,14 @@ fn subtract_kmers(kmers_in: Vec<&str>, kmer_counts: CountingBloomFilter, subtrac
         for (line_number, line) in io::BufReader::new(gz).lines().enumerate() {
             if line_number % 4 == 1 {
                 let dna: DnaString = DnaString::from_dna_string(&line.unwrap());
-                for kmer_start in 0..(dna.len()-k_size) {
+                for kmer_start in 0..(dna.len() - k_size + 1) {
                     let k: Kmer21 = dna.get_kmer(kmer_start);
                     let krc = k.rc();
                     let to_hash = min(k.to_u64(), krc.to_u64());
+                    if visited_kmer.contains(&to_hash) {
+                        continue;
+                    }
+                    visited_kmer.insert(&to_hash);
                     let source_count = kmer_counts.estimate_count(&to_hash);
                     if source_count >= min_source_count {
                         let subtract_count = subtract_counts.estimate_count(&to_hash);
@@ -134,7 +140,7 @@ fn count_kmers_fastq(kmers_in: &Vec<&str>, counting_bits: usize, estimated_kmers
         for (line_number, line) in io::BufReader::new(gz).lines().enumerate() {
             if line_number % 4 == 1 {
                 let dna: DnaString = DnaString::from_dna_string(&line.unwrap()); //Vec<u64> 2bit encoded
-                for kmer_start in 0..(dna.len() - k_size) {
+                for kmer_start in 0..(dna.len() - k_size + 1) {
                     let k: Kmer21 = dna.get_kmer(kmer_start); //statically typed kmer size
                     kmer_counts.insert(&min(k.to_u64(), k.rc().to_u64()));
                 }
