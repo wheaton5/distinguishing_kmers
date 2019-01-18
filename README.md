@@ -1,5 +1,5 @@
 # distinguishing_kmers
-Memory efficient (approximate) thresholded kmer set subtraction using counting bloom filters.
+Memory efficient (approximate) thresholded kmer set subtraction using a mod hash minimizer.
 
 To Install
 Requirements: Rust ver 1.3 or later

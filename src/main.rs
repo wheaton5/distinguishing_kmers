@@ -11,6 +11,7 @@ use std::fs::File;
 use std::cmp::min;
 
 use bloom::{ASMS,CountingBloomFilter,BloomFilter};
+use std::collections::HashMap;
 
 use clap::{Arg, App};
 
@@ -50,19 +51,19 @@ fn main() {
                 .long("difference_threshold")
                 .takes_value(true)
                 .help("threshold on difference between counts of infile and subtract files"))
-        .arg(Arg::with_name("estimated_kmers")
-                .long("estimated_kmers")
-                .help("estimated number of unique kmers. Good rule of thumb is genome size * 2")
-                .takes_value(true)
-                .required(true))
+        //.arg(Arg::with_name("estimated_kmers")
+        //        .long("estimated_kmers")
+        //        .help("estimated number of unique kmers. Good rule of thumb is genome size * 2")
+        //        .takes_value(true)
+        //        .required(true))
         .get_matches();
 
     let min_source_count = matches.value_of("min_source_count").unwrap_or("5");
-    let min_source_count: u32 = min_source_count.to_string().parse::<u32>().unwrap();
+    let min_source_count: u16 = min_source_count.to_string().parse::<u16>().unwrap();
     let min_subtract_count = matches.value_of("min_subtract_count").unwrap_or("3");
-    let min_subtract_count: u32 = min_subtract_count.to_string().parse::<u32>().unwrap();
+    let min_subtract_count: u16 = min_subtract_count.to_string().parse::<u16>().unwrap();
     let difference_threshold = matches.value_of("difference_threshold").unwrap_or("0");
-    let difference_threshold: u32 = difference_threshold.to_string().parse::<u32>().unwrap();
+    let difference_threshold: u16 = difference_threshold.to_string().parse::<u16>().unwrap();
     let estimated_kmers = matches.value_of("estimated_kmers").unwrap_or("6000000000");
     let estimated_kmers: u32 = estimated_kmers.to_string().parse::<u32>().unwrap();
     let kmers_in: Vec<_> = matches.values_of("kmers_in").unwrap().collect();
@@ -77,16 +78,62 @@ fn main() {
         eprintln!("\t{}",f);
     }
     eprintln!("with at least {} count",min_subtract_count);
-    eprintln!("Reminder! This program uses counting bloom filters and thus counts are approximate but can only be correct or over-counts");
+    eprintln!("Only considers kmers where the 2bit representation of the kmer % 9 == 0 to improve speed and memory usage. This is reasonable because otherwise for every difference you get 21 overlapping 21mers but with this you get on average just over 2 overlapping 21mers.");
+    //eprintln!("Reminder! This program uses counting bloom filters and thus counts are approximate but can only be correct or over-counts");
     let k_size: usize = 21; // THIS CANNOT BE CHANGED WITHOUT CHANGING Kmer datatype
     let source_counting_bits = 6;
     let subtract_counting_bits = 4;
-    let bloom_kmer_in_counts = count_kmers_fastq(&kmers_in, source_counting_bits, estimated_kmers, k_size);
-    let bloom_kmer_subtract_counts = count_kmers_fastq(&kmers_subtract, subtract_counting_bits, estimated_kmers, k_size);
-
-    subtract_kmers(kmers_in, bloom_kmer_in_counts, bloom_kmer_subtract_counts, min_source_count, min_subtract_count, difference_threshold, k_size, estimated_kmers);
+    //let bloom_kmer_in_counts = count_kmers_fastq(&kmers_in, source_counting_bits, estimated_kmers, k_size);
+    //let bloom_kmer_subtract_counts = count_kmers_fastq(&kmers_subtract, subtract_counting_bits, estimated_kmers, k_size);
+    let kmer_in_counts = count_kmers_fastq_exact(&kmers_in, k_size);
+    let kmer_subtract_counts = count_kmers_fastq_exact(&kmers_subtract, k_size);
+    subtract_kmers_exact(kmer_in_counts, kmer_subtract_counts, min_source_count, min_subtract_count, difference_threshold, k_size);
+    //subtract_kmers(kmers_in, bloom_kmer_in_counts, bloom_kmer_subtract_counts, min_source_count, min_subtract_count, difference_threshold, k_size, estimated_kmers);
 }
 
+
+fn subtract_kmers_exact(kmers_in: HashMap<u64,u16>, subtract_counts: HashMap<u64,u16>, 
+                min_source_count: u16, min_subtract_count: u16, difference_threshold: u16, k_size: usize) {
+    for (kmeru64, source_count) in &kmers_in {
+        if *source_count > min_source_count {
+            let subtract_count = match subtract_counts.get(&kmeru64) {Some(x) => *x, None => 0,};
+            if subtract_count <= min_subtract_count && source_count - subtract_count >= difference_threshold {
+                let kmer = Kmer21::from_u64(*kmeru64);
+                println!("{}\t{}\t{}",kmer.to_string(), source_count, subtract_count);
+            }
+        }
+    }
+}
+
+fn count_kmers_fastq_exact(kmers_in: &Vec<&str>, k_size: usize) -> HashMap<u64,u16> {
+    let mut kmer_counts: HashMap<u64, u16> = HashMap::new();
+    for kmer_file in kmers_in {
+        let file = match File::open(kmer_file) {
+            Ok(file) => file,
+            Err(error) => {
+                panic!("There was a problem opening the file {} with error {}", kmer_file, error)
+            },
+        };
+        let gz = GzDecoder::new(file);
+        for (line_number, line) in io::BufReader::new(gz).lines().enumerate() {
+            if line_number % 4 == 1 {
+                let dna: DnaString = DnaString::from_dna_string(&line.unwrap()); //Vec<u64> 2bit encoded
+                for kmer_start in 0..(dna.len() - k_size + 1) {
+                    let k: Kmer21 = dna.get_kmer(kmer_start); //statically typed kmer size
+                    let to_hash = min(k.to_u64(), k.rc().to_u64());
+                    if to_hash % 9 == 0 {
+                        let mut count = kmer_counts.entry(to_hash).or_insert(0);
+                        if *count < 65535 {
+                            *count += 1;
+                        }
+                    }
+                    //kmer_counts.insert(&min(k.to_u64(), k.rc().to_u64()));
+                }
+            }
+        }
+    }
+    kmer_counts
+}
 
 fn subtract_kmers(kmers_in: Vec<&str>, kmer_counts: CountingBloomFilter, subtract_counts: CountingBloomFilter, 
                 min_source_count: u32, min_subtract_count: u32, difference_threshold: u32, k_size: usize, estimated_kmers: u32) {
