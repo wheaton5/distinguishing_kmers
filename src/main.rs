@@ -64,8 +64,8 @@ fn main() {
     let min_subtract_count: u16 = min_subtract_count.to_string().parse::<u16>().unwrap();
     let difference_threshold = matches.value_of("difference_threshold").unwrap_or("0");
     let difference_threshold: u16 = difference_threshold.to_string().parse::<u16>().unwrap();
-    let estimated_kmers = matches.value_of("estimated_kmers").unwrap_or("6000000000");
-    let estimated_kmers: u32 = estimated_kmers.to_string().parse::<u32>().unwrap();
+    //let estimated_kmers = matches.value_of("estimated_kmers").unwrap_or("6000000000");
+    //let estimated_kmers: u32 = estimated_kmers.to_string().parse::<u32>().unwrap();
     let kmers_in: Vec<_> = matches.values_of("kmers_in").unwrap().collect();
     let kmers_subtract: Vec<_> = matches.values_of("kmers_subtract").unwrap().collect();
     eprintln!("");
@@ -107,6 +107,12 @@ fn subtract_kmers_exact(kmers_in: HashMap<u64,u16>, subtract_counts: HashMap<u64
 
 fn count_kmers_fastq_exact(kmers_in: &Vec<&str>, k_size: usize) -> HashMap<u64,u16> {
     let mut kmer_counts: HashMap<u64, u16> = HashMap::new();
+
+    //let mut binary = match File::create("kmers.bin") {
+    //        Err(_) => panic!("couldn't open file for writing"),
+    //        Ok(file) => file,
+    //};
+
     for kmer_file in kmers_in {
         let file = match File::open(kmer_file) {
             Ok(file) => file,
@@ -122,6 +128,7 @@ fn count_kmers_fastq_exact(kmers_in: &Vec<&str>, k_size: usize) -> HashMap<u64,u
                     let k: Kmer21 = dna.get_kmer(kmer_start); //statically typed kmer size
                     let to_hash = min(k.to_u64(), k.rc().to_u64());
                     if to_hash % 9 == 0 {
+                        //binary.write_all(to_hash);
                         let mut count = kmer_counts.entry(to_hash).or_insert(0);
                         if *count < 65535 {
                             *count += 1;

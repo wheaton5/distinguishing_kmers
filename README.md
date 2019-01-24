@@ -39,7 +39,7 @@ OPTIONS:
 
 Example using tiny made up data
 ```
-./target/release/distinguishing_kmers --kmers_in test/data/kmers_in.fastq.gz --kmers_subtract test/data/kmers_subtract.fastq.gz --min_source_count 5 --max_subtract_count 4 --estimated_kmers 1000
+./target/release/distinguishing_kmers --kmers_in test/data/kmers_in.fastq.gz --kmers_subtract test/data/kmers_subtract.fastq.gz --min_source_count 5 --max_subtract_count 4
 
 This program will take kmers from files
         test/data/kmers_in.fastq.gz
@@ -47,5 +47,6 @@ with at least 5 count and subtract kmers from files
         test/data/kmers_subtract.fastq.gz
 with at least 3 count
 Reminder! This program uses counting bloom filters and thus counts are approximate but can only be correct or over-counts
-AAAAAAGGGGGACCCCTTTTT   6       0
+CTCGACTCTGCCGCAGCTACC   6       0
+
 ```
