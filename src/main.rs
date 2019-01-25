@@ -18,6 +18,7 @@ use clap::{Arg, App};
 use debruijn::*;
 use debruijn::dna_string::*;
 use debruijn::kmer::*;
+static mut KMER_SIZE: usize = 21;
 
 fn main() {
     let matches = App::new("distinguishing_kmers")
@@ -37,6 +38,12 @@ fn main() {
                 .required(true)
                 .multiple(true)
                 .help("fastq files of kmers to be threshold subtracted from kmers_in files."))
+        .arg(Arg::with_name("kmer_size")
+                .long("kmer_size")
+                .short("k")
+                .takes_value(true)
+                .required(false)
+                .help("kmer size to use. default = 21"))
         .arg(Arg::with_name("min_source_count")
                 .long("min_source_count")
                 .takes_value(true)
@@ -57,7 +64,12 @@ fn main() {
         //        .takes_value(true)
         //        .required(true))
         .get_matches();
-
+    let kmer_size = matches.value_of("kmer_size").unwrap_or("21");
+    let kmer_size: usize = kmer_size.to_string().parse::<usize>().unwrap();
+    if kmer_size > 32 { panic!("kmer size too large, only support k < 32. found {}", kmer_size); }
+    unsafe {
+        KMER_SIZE = kmer_size;
+    }
     let min_source_count = matches.value_of("min_source_count").unwrap_or("5");
     let min_source_count: u16 = min_source_count.to_string().parse::<u16>().unwrap();
     let min_subtract_count = matches.value_of("min_subtract_count").unwrap_or("3");
@@ -78,7 +90,7 @@ fn main() {
         eprintln!("\t{}",f);
     }
     eprintln!("with at least {} count",min_subtract_count);
-    eprintln!("Only considers kmers where the 2bit representation of the kmer % 9 == 0 to improve speed and memory usage. This is reasonable because otherwise for every difference you get 21 overlapping 21mers but with this you get on average just over 2 overlapping 21mers.");
+    eprintln!("Only considers kmers where the 2bit representation of the kmer % 9 == 0 to improve speed and memory usage. This is reasonable because otherwise for every difference you get {} overlapping {}mers but with this you get on average just over 2 overlapping {}mers.",kmer_size,kmer_size,kmer_size);
     //eprintln!("Reminder! This program uses counting bloom filters and thus counts are approximate but can only be correct or over-counts");
     let k_size: usize = 21; // THIS CANNOT BE CHANGED WITHOUT CHANGING Kmer datatype
     let source_counting_bits = 6;
@@ -88,6 +100,7 @@ fn main() {
     let kmer_in_counts = count_kmers_fastq_exact(&kmers_in, k_size);
     let kmer_subtract_counts = count_kmers_fastq_exact(&kmers_subtract, k_size);
     subtract_kmers_exact(kmer_in_counts, kmer_subtract_counts, min_source_count, min_subtract_count, difference_threshold, k_size);
+    
     //subtract_kmers(kmers_in, bloom_kmer_in_counts, bloom_kmer_subtract_counts, min_source_count, min_subtract_count, difference_threshold, k_size, estimated_kmers);
 }
 
@@ -123,10 +136,12 @@ fn count_kmers_fastq_exact(kmers_in: &Vec<&str>, k_size: usize) -> HashMap<u64,u
         let gz = GzDecoder::new(file);
         for (line_number, line) in io::BufReader::new(gz).lines().enumerate() {
             if line_number % 4 == 1 {
-                let dna: DnaString = DnaString::from_dna_string(&line.unwrap()); //Vec<u64> 2bit encoded
-                for kmer_start in 0..(dna.len() - k_size + 1) {
-                    let k: Kmer21 = dna.get_kmer(kmer_start); //statically typed kmer size
+                //let dna: DnaString = DnaString::from_dna_string(&line.unwrap()); //Vec<u64> 2bit encoded
+                //for kmer_start in 0..(dna.len() - k_size + 1) {
+                //    let k: Kmer21 = dna.get_kmer(kmer_start); //statically typed kmer size
+                for k in Kmer21::kmers_from_ascii(&line.unwrap().as_bytes()) {
                     let to_hash = min(k.to_u64(), k.rc().to_u64());
+                    //println!("{}",k.to_string());
                     if to_hash % 9 == 0 {
                         //binary.write_all(to_hash);
                         let mut count = kmer_counts.entry(to_hash).or_insert(0);
@@ -196,6 +211,7 @@ fn count_kmers_fastq(kmers_in: &Vec<&str>, counting_bits: usize, estimated_kmers
                 let dna: DnaString = DnaString::from_dna_string(&line.unwrap()); //Vec<u64> 2bit encoded
                 for kmer_start in 0..(dna.len() - k_size + 1) {
                     let k: Kmer21 = dna.get_kmer(kmer_start); //statically typed kmer size
+                    println!("{}",k.to_string());
                     kmer_counts.insert(&min(k.to_u64(), k.rc().to_u64()));
                 }
             }
@@ -210,6 +226,8 @@ pub struct K21;
 
 impl KmerSize for K21 {
     fn K() -> usize {
-        21
+        unsafe {
+            KMER_SIZE
+        }
     }
 }
