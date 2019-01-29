@@ -132,7 +132,6 @@ fn count_kmers_fastq_exact(kmers_in: &Vec<&str>, modimizer: i64, mod_index: i64)
         };
         let filetype = kmer_file.split(".").collect::<Vec<&str>>();
         let filetype = filetype[filetype.len()-1];
-        println!("{}",filetype);
         let reader: Box<Read> = match filetype { 
             "gz" => Box::new(GzDecoder::new(file)), 
             _ => Box::new(file), 
