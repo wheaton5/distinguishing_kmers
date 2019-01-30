@@ -8,3 +8,4 @@ clap = "2.32.0"
 flate2 = "1.0.6"
 bloom = "0.3.2"
 debruijn = {git = "https://github.com/10XGenomics/rust-debruijn.git"}
+dna_io = {git = "https://github.com/wheaton5/dna_io.git"}

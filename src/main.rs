@@ -2,9 +2,9 @@ extern crate clap;
 extern crate flate2;
 extern crate bloom;
 extern crate debruijn;
+extern crate dna_io;
 
 use flate2::read::GzDecoder;
-use std::io::BufReader;
 use std::io;
 use std::io::prelude::*;
 use std::fs::File;
@@ -31,14 +31,14 @@ fn main() {
                 .takes_value(true)
                 .multiple(true)
                 .required(true)
-                .help("fastq or fasta (can be gzipped) files from which kmers are taken"))
+                .help("sequence files from which kmers are taken (supports fastq/fasta (can be gzipped), sam/bam)"))
         .arg(Arg::with_name("kmers_subtract")
                 .short("s")
                 .long("kmers_subtract")
                 .takes_value(true)
                 .required(true)
                 .multiple(true)
-                .help("fastq or fasta (can be gzipped) files of kmers to be threshold subtracted from kmers_in files."))
+                .help("sequence files of kmers to be threshold subtracted from kmers_in files. supports fastq/fasta (can be gzipped), sam/bam"))
         .arg(Arg::with_name("kmer_size")
                 .long("kmer_size")
                 .short("k")
@@ -78,8 +78,8 @@ fn main() {
     }
     let min_source_count = matches.value_of("min_source_count").unwrap_or("5");
     let min_source_count: u16 = min_source_count.to_string().parse::<u16>().unwrap();
-    let min_subtract_count = matches.value_of("min_subtract_count").unwrap_or("3");
-    let min_subtract_count: u16 = min_subtract_count.to_string().parse::<u16>().unwrap();
+    let max_subtract_count = matches.value_of("max_subtract_count").unwrap_or("0");
+    let max_subtract_count: u16 = max_subtract_count.to_string().parse::<u16>().unwrap();
     let difference_threshold = matches.value_of("difference_threshold").unwrap_or("0");
     let difference_threshold: u16 = difference_threshold.to_string().parse::<u16>().unwrap();
     let modimizer = matches.value_of("modimizer").unwrap_or("9");
@@ -97,20 +97,20 @@ fn main() {
     for f in &kmers_subtract {
         eprintln!("\t{}",f);
     }
-    eprintln!("with at least {} count",min_subtract_count);
+    eprintln!("with at least {} count",max_subtract_count);
     eprintln!("Only considers kmers where the 2bit representation of the kmer % 9 == 0 to improve speed and memory usage. This is reasonable because otherwise for every difference you get {} overlapping {}mers but with this you get on average just over 2 overlapping {}mers.",kmer_size,kmer_size,kmer_size);
     //let source_counting_bits = 6;
     //let subtract_counting_bits = 4;
     let kmer_in_counts = count_kmers_fastq_exact(&kmers_in, modimizer, mod_index);
     let kmer_subtract_counts = count_kmers_fastq_exact(&kmers_subtract, modimizer, mod_index);
-    subtract_kmers_exact(kmer_in_counts, kmer_subtract_counts, min_source_count, min_subtract_count, difference_threshold);
+    subtract_kmers_exact(kmer_in_counts, kmer_subtract_counts, min_source_count, max_subtract_count, difference_threshold);
 }
 
 
 fn subtract_kmers_exact(kmers_in: HashMap<u64,u16>, subtract_counts: HashMap<u64,u16>, 
                 min_source_count: u16, min_subtract_count: u16, difference_threshold: u16) {
     for (kmeru64, source_count) in &kmers_in {
-        if *source_count > min_source_count {
+        if *source_count >= min_source_count {
             let subtract_count = match subtract_counts.get(&kmeru64) {Some(x) => *x, None => 0,};
             if subtract_count <= min_subtract_count && source_count - subtract_count >= difference_threshold {
                 let kmer = KmerX::from_u64(*kmeru64);
@@ -124,43 +124,22 @@ fn count_kmers_fastq_exact(kmers_in: &Vec<&str>, modimizer: i64, mod_index: i64)
     let mut kmer_counts: HashMap<u64, u16> = HashMap::new();
 
     for kmer_file in kmers_in {
-        let file = match File::open(kmer_file) {
-            Ok(file) => file,
-            Err(error) => {
-                panic!("There was a problem opening the file {} with error {}", kmer_file, error)
-            },
-        };
-        let filetype = kmer_file.split(".").collect::<Vec<&str>>();
-        let filetype = filetype[filetype.len()-1];
-        let reader: Box<Read> = match filetype { 
-            "gz" => Box::new(GzDecoder::new(file)), 
-            _ => Box::new(file), 
-        }; 
-        let reader = BufReader::new(reader);
-        let mut fasta = false;
-        let mut seq_next = false;
-        
-        for line in reader.lines() {
-            let line = line.unwrap();
-            if line.starts_with("@") {
-                seq_next = true;
-                continue;
-            } else if line.starts_with(">") {
-                seq_next = true;
-                fasta = true;
-                continue;
-            }
-            if seq_next {
-                for k in KmerX::kmers_from_ascii(&line.as_bytes()) {
-                    let to_hash = min(k.to_u64(), k.rc().to_u64());
-                    if to_hash % modimizer as u64 == mod_index as u64 {
-                        let mut count = kmer_counts.entry(to_hash).or_insert(0);
-                        if *count < 65535 {
-                            *count += 1;
-                        }
+        let mut reader = dna_io::DnaReader::from_path(kmer_file);
+
+        'recloop: loop {
+            let record = match reader.next() {
+                None => break 'recloop,
+                Some(x) => x,
+            };
+                
+            for k in KmerX::kmers_from_ascii(&record.seq.as_bytes()) {
+                let to_hash = min(k.to_u64(), k.rc().to_u64());
+                if to_hash % modimizer as u64 == mod_index as u64 {
+                    let mut count = kmer_counts.entry(to_hash).or_insert(0);
+                    if *count < 65535 {
+                        *count += 1;
                     }
                 }
-                if !fasta { seq_next = false; }
             }
         }
     }
