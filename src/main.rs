@@ -1,3 +1,4 @@
+#[macro_use]
 extern crate clap;
 extern crate flate2;
 extern crate bloom;
@@ -14,7 +15,7 @@ use std::cmp::min;
 use bloom::{ASMS,CountingBloomFilter,BloomFilter};
 use std::collections::HashMap;
 
-use clap::{Arg, App};
+use clap::{App};
 
 use debruijn::*;
 use debruijn::dna_string::*;
@@ -22,72 +23,13 @@ use debruijn::kmer::*;
 static mut KMER_SIZE: usize = 21;
 
 fn main() {
-    let matches = App::new("distinguishing_kmers")
-        .author("Haynes Heaton <whheaton@gmail.com>")
-        .about("Thresholded kmer set subtraction using counting bloom filters. Designed for finding haplotype distinguishing kmers with pedigree illumina data.")
-        .arg(Arg::with_name("kmers_in")
-                .short("i")
-                .long("kmers_in")
-                .takes_value(true)
-                .multiple(true)
-                .required(true)
-                .help("sequence files from which kmers are taken (supports fastq/fasta (can be gzipped), sam/bam)"))
-        .arg(Arg::with_name("kmers_subtract")
-                .short("s")
-                .long("kmers_subtract")
-                .takes_value(true)
-                .required(true)
-                .multiple(true)
-                .help("sequence files of kmers to be threshold subtracted from kmers_in files. supports fastq/fasta (can be gzipped), sam/bam"))
-        .arg(Arg::with_name("kmer_size")
-                .long("kmer_size")
-                .short("k")
-                .takes_value(true)
-                .required(false)
-                .help("kmer size to use. default = 21"))
-        .arg(Arg::with_name("min_source_count")
-                .long("min_source_count")
-                .takes_value(true)
-                .help("min kmer count in input files to report in output")
-                .required(true))
-        .arg(Arg::with_name("max_subtract_count")
-                .long("max_subtract_count")
-                .takes_value(true)
-                .help("max kmer count in subtract files before it subtracts from kmers_in")
-                .required(true))
-        .arg(Arg::with_name("difference_threshold")
-                .long("difference_threshold")
-                .takes_value(true)
-                .help("threshold on difference between counts of infile and subtract files"))
-        .arg(Arg::with_name("modimizer")
-                .long("modimizer")
-                .takes_value(true)
-                .required(false)
-                .help("number by which to mod kmer hashes and keep kmer_hash % modimizer == mod_index kmers. Default is 9. Increasing will decrease memory required."))
-        .arg(Arg::with_name("mod_index")
-                .long("mod_index")
-                .takes_value(true)
-                .required(false)
-                .help("remainder after kmer hash mod to keep kmers. Reminder kmer_hash % modimizer == mod_index kmers will be kept. Input -1 to automatically run over all mod_indexes <not implemented>."))
-        .get_matches();
-    let kmer_size = matches.value_of("kmer_size").unwrap_or("21");
-    let kmer_size: usize = kmer_size.to_string().parse::<usize>().unwrap();
-    if kmer_size > 32 { panic!("kmer size too large, only support k < 32. found {}", kmer_size); }
-    unsafe {
-        KMER_SIZE = kmer_size;
-    }
-    let min_source_count = matches.value_of("min_source_count").unwrap_or("5");
-    let min_source_count: u16 = min_source_count.to_string().parse::<u16>().unwrap();
-    let max_subtract_count = matches.value_of("max_subtract_count").unwrap_or("0");
-    let max_subtract_count: u16 = max_subtract_count.to_string().parse::<u16>().unwrap();
-    let difference_threshold = matches.value_of("difference_threshold").unwrap_or("0");
-    let difference_threshold: u16 = difference_threshold.to_string().parse::<u16>().unwrap();
-    let modimizer = matches.value_of("modimizer").unwrap_or("9");
-    let modimizer: i64 = modimizer.to_string().parse::<i64>().unwrap();
-    let mod_index = matches.value_of("mod_index").unwrap_or("0");
-    let mod_index: i64 = mod_index.to_string().parse::<i64>().unwrap();
-    let kmers_in: Vec<_> = matches.values_of("kmers_in").unwrap().collect();
-    let kmers_subtract: Vec<_> = matches.values_of("kmers_subtract").unwrap().collect();
+    let (min_source_count, 
+        max_subtract_count, 
+        difference_threshold,
+        modimizer,
+        mod_index,
+        kmers_in,
+        kmers_subtract) = load_params();
     eprintln!("");
     eprintln!("This program will take kmers from files");
     for f in &kmers_in {
@@ -98,7 +40,9 @@ fn main() {
         eprintln!("\t{}",f);
     }
     eprintln!("with at least {} count",max_subtract_count);
-    eprintln!("Only considers kmers where the 2bit representation of the kmer % 9 == 0 to improve speed and memory usage. This is reasonable because otherwise for every difference you get {} overlapping {}mers but with this you get on average just over 2 overlapping {}mers.",kmer_size,kmer_size,kmer_size);
+    unsafe {
+        eprintln!("Only considers kmers where the 2bit representation of the kmer % 9 == 0 to improve speed and memory usage. This is reasonable because otherwise for every difference you get {} overlapping {}mers but with this you get on average just over 2 overlapping {}mers.",KMER_SIZE,KMER_SIZE,KMER_SIZE);
+    }
     //let source_counting_bits = 6;
     //let subtract_counting_bits = 4;
     let kmer_in_counts = count_kmers_fastq_exact(&kmers_in, modimizer, mod_index);
@@ -120,7 +64,7 @@ fn subtract_kmers_exact(kmers_in: HashMap<u64,u16>, subtract_counts: HashMap<u64
     }
 }
 
-fn count_kmers_fastq_exact(kmers_in: &Vec<&str>, modimizer: i64, mod_index: i64) -> HashMap<u64,u16> {
+fn count_kmers_fastq_exact(kmers_in: &Vec<String>, modimizer: i64, mod_index: i64) -> HashMap<u64,u16> {
     let mut kmer_counts: HashMap<u64, u16> = HashMap::new();
 
     for kmer_file in kmers_in {
@@ -187,7 +131,7 @@ fn subtract_kmers(kmers_in: Vec<&str>, kmer_counts: CountingBloomFilter, subtrac
 }
 
 #[allow(dead_code)]
-fn count_kmers_fastq(kmers_in: &Vec<&str>, counting_bits: usize, estimated_kmers: u32, k_size: usize, 
+fn count_kmers_fastq(kmers_in: &Vec<String>, counting_bits: usize, estimated_kmers: u32, k_size: usize, 
         _modimizer: i64, _mod_index: i64) -> CountingBloomFilter {
     let mut kmer_counts: CountingBloomFilter = CountingBloomFilter::with_rate(counting_bits, 0.05, estimated_kmers);
     for kmer_file in kmers_in {
@@ -222,4 +166,40 @@ impl KmerSize for KX {
             KMER_SIZE
         }
     }
+}
+
+fn load_params() -> (u16, u16, u16, i64, i64, Vec<String>, Vec<String>) {
+    let yaml_params = load_yaml!("params.yml");
+    let params = App::from_yaml(yaml_params).get_matches();
+    let kmer_size = params.value_of("kmer_size").unwrap_or("21");
+    let kmer_size: usize = kmer_size.to_string().parse::<usize>().unwrap();
+    if kmer_size > 32 { panic!("kmer size too large, only support k < 32. found {}", kmer_size); }
+    unsafe {
+        KMER_SIZE = kmer_size;
+    }
+    let min_source_count = params.value_of("min_source_count").unwrap_or("5");
+    let min_source_count: u16 = min_source_count.to_string().parse::<u16>().unwrap();
+    let max_subtract_count = params.value_of("max_subtract_count").unwrap_or("0");
+    let max_subtract_count: u16 = max_subtract_count.to_string().parse::<u16>().unwrap();
+    let difference_threshold = params.value_of("difference_threshold").unwrap_or("0");
+    let difference_threshold: u16 = difference_threshold.to_string().parse::<u16>().unwrap();
+    let modimizer = params.value_of("modimizer").unwrap_or("9");
+    let modimizer: i64 = modimizer.to_string().parse::<i64>().unwrap();
+    let mod_index = params.value_of("mod_index").unwrap_or("0");
+    let mod_index: i64 = mod_index.to_string().parse::<i64>().unwrap();
+    let mut kmers_in: Vec<String> = Vec::new();
+    for kmer_in in params.values_of("kmers_in").unwrap() {
+        kmers_in.push(kmer_in.to_string());
+    }
+    let mut kmers_subtract: Vec<String> = Vec::new();
+    for kmer_subtract in params.values_of("kmers_subtract").unwrap() {
+        kmers_subtract.push(kmer_subtract.to_string());
+    }
+    (min_source_count,
+    max_subtract_count,
+    difference_threshold,
+    modimizer,
+    mod_index,
+    kmers_in,
+    kmers_subtract)
 }

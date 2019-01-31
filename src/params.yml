@@ -1,0 +1,49 @@
+name: distinguishing_kmers
+version: "1.0"
+author: Haynes Heaton <whheaton@gmail.com>
+about: Thresholded kmer set subtraction using counting bloom filters. Designed for finding haplotype distinguishing kmers with pedigree illumina data.
+args:
+    - kmers_in:
+        long: kmers_in
+        short: i
+        takes_value: true
+        multiple: true
+        required: true
+        help: sequence files from which kmers are taken (supports fastq/fasta (can be gzipped), sam/bam)
+    - kmers_subtract:
+        short: s
+        long: kmers_subtract
+        takes_value: true
+        required: true
+        multiple: true
+        help: sequence files of kmers to be threshold subtracted from kmers_in files. supports fastq/fasta (can be gzipped), sam/bam
+    - kmer_size:
+        long: kmer_size
+        short: k
+        takes_value: true
+        required: false
+        help: kmer size to use. default = 21
+    - min_source_count:
+        long: min_source_count
+        takes_value: true
+        help: min kmer count in input files to report in output
+        required: true
+    - max_subtract_count:
+        long: max_subtract_count
+        takes_value: true
+        help: max kmer count in subtract files before it subtracts from kmers_in
+        required: true
+    - difference_threshold:
+        long: difference_threshold
+        takes_value: true
+        help: threshold on difference between counts of infile and subtract files
+    - modimizer:
+        long: modimizer
+        takes_value: true
+        required: false
+        help: number by which to mod kmer hashes and keep kmer_hash % modimizer == mod_index kmers. Default is 9. Increasing will decrease memory required.
+    - mod_index:
+        long: mod_index
+        takes_value: true
+        required: false
+        help: remainder after kmer hash mod to keep kmers. Reminder kmer_hash % modimizer == mod_index kmers will be kept. Input -1 to automatically run over all mod_indexes <not implemented>.
