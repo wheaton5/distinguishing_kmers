@@ -41,7 +41,7 @@ fn main() {
     }
     eprintln!("with at least {} count",max_subtract_count);
     unsafe {
-        eprintln!("Only considers kmers where the 2bit representation of the kmer % 9 == 0 to improve speed and memory usage. This is reasonable because otherwise for every difference you get {} overlapping {}mers but with this you get on average just over 2 overlapping {}mers.",KMER_SIZE,KMER_SIZE,KMER_SIZE);
+        eprintln!("Only considers kmers where the 2bit representation of the kmer % modimizer == mod_index to improve speed and memory usage. This is reasonable because otherwise for every difference you get {} overlapping {}mers but with this you get on average just over 2 overlapping {}mers.",KMER_SIZE,KMER_SIZE,KMER_SIZE);
     }
     //let source_counting_bits = 6;
     //let subtract_counting_bits = 4;
@@ -70,12 +70,7 @@ fn count_kmers_fastq_exact(kmers_in: &Vec<String>, modimizer: i64, mod_index: i6
     for kmer_file in kmers_in {
         let mut reader = dna_io::DnaReader::from_path(kmer_file);
 
-        'recloop: loop {
-            let record = match reader.next() {
-                None => break 'recloop,
-                Some(x) => x,
-            };
-                
+        for record in reader {
             for k in KmerX::kmers_from_ascii(&record.seq.as_bytes()) {
                 let to_hash = min(k.to_u64(), k.rc().to_u64());
                 if to_hash % modimizer as u64 == mod_index as u64 {
